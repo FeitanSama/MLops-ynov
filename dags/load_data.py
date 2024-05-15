@@ -33,6 +33,7 @@ URL_FILE = os.path.join(DATA_PATH, "api", "url.json")
 RESULTS_FILE = os.path.join(DATA_PATH, "api", "results.json")
 
 def check_environment_setup():
+    """Check Env Setup"""
     logger.info("Checking environment setup...")
     logger.info(f"[info logger] cwd: {os.getcwd()}")
     logger.info(f"[info logger] URL_FILE: {URL_FILE}")
@@ -48,7 +49,7 @@ def check_environment_setup():
 
 
 def ademe_api():
-
+    """Get Data from Ademe API"""
     # test url file exists
     assert os.path.isfile(URL_FILE)
     # open url file
@@ -71,7 +72,7 @@ def ademe_api():
         json.dump(data, file, indent=4, ensure_ascii=False)  
 
 def process_results():
-
+    """Process results"""
     # test url file exists
     assert os.path.isfile(RESULTS_FILE)
 
@@ -108,6 +109,7 @@ def process_results():
 
 # Initialisation de la connexion à la base de données PostgreSQL
 def init_db_connection(pg_password: str) -> psycopg2._psycopg.connection:
+    """Init connection to PostgreSQL"""
     db_host = "mlops-ynov.postgres.database.azure.com"
     db_port = 5432
     db_user = "azureuser"
@@ -127,6 +129,7 @@ def init_db_connection(pg_password: str) -> psycopg2._psycopg.connection:
 
 # Fonction pour renommer les colonnes
 def rename_columns(columns: t.List[str]) -> t.List[str]:
+    """Rename columuns"""
     columns = [col.lower() for col in columns]
 
     rgxs = [
@@ -144,6 +147,7 @@ def rename_columns(columns: t.List[str]) -> t.List[str]:
     return columns
 
 def drop_duplicates():
+    """Drop duplicates"""
     query = """
         DELETE FROM dpe_logement
         WHERE id IN (
@@ -207,6 +211,7 @@ def cleanup_local_data():
 
 # Chargement des données dans la base de données PostgreSQL
 def save_postgresdb():
+    """ Save PostgreSQL database"""
     assert os.path.isfile(RESULTS_FILE)
 
     # Lire la sortie de l'appel API précédent
