@@ -32,18 +32,16 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v2
 
-    - name: Set up SSH connection
+    - name: Connect and deploy to VM
       uses: appleboy/ssh-action@master
       with:
         host : ${{ secrets.IP }}
         username : ${{ secrets.USER }}
         password : ${{ secrets.PASSWORD }}
-
-    - name: Deploy code to VM
-      run: | 
-          cd airflow
-          git checkout .
-          git pull
-          docker
-          docker-compose down
-          docker-compose up -d
+        script: | 
+            cd airflow
+            git checkout .
+            git pull
+            docker
+            docker-compose down
+            docker-compose up -d
