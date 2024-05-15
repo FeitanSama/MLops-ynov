@@ -8,10 +8,10 @@ from datetime import datetime, timedelta
 import typing as t
 # import requests
 import pandas as pd
-from db_utils import Database
+import psycopg2
 from airflow.models.dag import DAG
 from airflow.operators.python import PythonOperator
-# from airflow.models import Variable
+from airflow.models import Variable
 
 # Chemin du fichier de résultats
 try:
@@ -23,17 +23,29 @@ DOWNLOADED_FILES_PATH = os.path.join(DATA_PATH)
 URL_FILE = os.path.join(DATA_PATH, "api", "url.json")
 RESULTS_FILE = os.path.join(DATA_PATH, "api", "results.json")
 
+try:
+    pg_password = Variable.get("AZURE_PG_PASSWORD")
+except:
+    pg_password = os.environ.get("AZURE_PG_PASSWORD")
+
 # Initialisation de la connexion à la base de données PostgreSQL
 def init_db_connection():
     db_host = "mlops-ynov.postgres.database.azure.com"
     db_port = 5432
     db_user = "azureuser"
-    db_password = "mlops-ynov@2024"
+    db_password = pg_password
     db_name = "postgres"
 
     # Initialise la connexion à la base de données et retourne l'objet de connexion
-    db = Database(host=db_host, port=db_port, user=db_user, password=db_password, database=db_name)
-    return db
+    conn = psycopg2.connect(
+        host=db_host,
+        port=db_port,
+        user=db_user,
+        password=db_password,
+        database=db_name,
+    )
+
+    return conn
 
 # Fonction pour renommer les colonnes
 def rename_columns(columns: t.List[str]) -> t.List[str]:
@@ -79,7 +91,7 @@ def save_postgresdb():
 
 # Définition du DAG
 with DAG(
-    "ademe_data",
+    "load_data",
     default_args={
         "depends_on_past": False,
         "email": ["guillaume.dupuy@ynov.com"],
