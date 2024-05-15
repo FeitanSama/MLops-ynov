@@ -289,6 +289,6 @@ with DAG(
     save_postgresdb.set_downstream(drop_duplicates)
     # upload data
     process_results.set_downstream(upload_data)
-    upload_data.set_downstream(cleanup_local_data)
+    upload_data.set_downstream(cleanup_local_data) # pylint: disable=no-member
 
-    check_environment_setup >> ademe_api >> process_results >> save_postgresdb >> drop_duplicates >> cleanup_local_data
+    check_environment_setup >> ademe_api >> process_results >> save_postgresdb >> drop_duplicates >> cleanup_local_data # pylint: disable=pointless-statement
