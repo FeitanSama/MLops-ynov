@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 # Chemin du fichier de résultats
 try:
     DATA_PATH = "/opt/airflow/data/"
-except:
+except: # pylint: disable=bare-except
     DATA_PATH = "/Users/guill/Desktop/MLops-ynov/data/"
 
 DOWNLOADED_FILES_PATH = os.path.join(DATA_PATH)
@@ -58,7 +58,10 @@ def ademe_api():
     assert url.get("payload") is not None
 
     # make GET requests
-    results = requests.get(url.get("url"), params=url.get("payload"), timeout=5)
+    results = requests.get(
+        url.get("url"), 
+        params=url.get("payload"), 
+        timeout=5)
     assert results.raise_for_status() is None
 
     data = results.json()
@@ -82,7 +85,9 @@ def process_results():
     # extract payload as dict
     parsed_url = urlparse(data.get("next"))
     query_params = parse_qs(parsed_url.query)
-    new_payload = {k: v[0] if len(v) == 1 else v for k, v in query_params.items()}
+    new_payload = {
+        k: v[0] if len(v) == 1 else v for k, v in query_params.items()
+    }
 
     # save new url (same as old url) with new payload into url.json
     new_url = {"url": base_url, "payload": new_payload}
@@ -93,7 +98,10 @@ def process_results():
     # saves data to data file
     # append current timestamp (up to the second to the filename)
     timestamp = int(time.time())
-    data_filename = os.path.join(DOWNLOADED_FILES_PATH, f"data_{timestamp}.json")
+    data_filename = os.path.join(
+        DOWNLOADED_FILES_PATH, 
+        f"data_{timestamp}.json"
+    )
 
     with open(data_filename, "w", encoding="utf-8") as file:
         json.dump(data["results"], file, indent=4, ensure_ascii=False)
