@@ -21,7 +21,9 @@ import random
 
 
 class Database:
+    """Database class"""
     def __init__(self):
+        """Init Context"""
         try:
             pg_password = Variable.get("AZURE_PG_PASSWORD")
         except:
@@ -42,6 +44,7 @@ class Database:
         )
 
     def insert(self, insert_query):
+        """Insert rows into the database"""
         cursor = self.connection.cursor()
 
         cursor.execute(insert_query)
@@ -49,6 +52,7 @@ class Database:
         cursor.close()
 
     def execute(self, query_):
+        """Execute command"""
         cursor = self.connection.cursor()
 
         cursor.execute(query_)
@@ -56,10 +60,12 @@ class Database:
         cursor.close()
 
     def close(self):
+        """Close connexion"""
         self.connection.close()
         self.engine.dispose()
 
 class FeatureSets:
+    """Feature set class"""
     input_columns = [
         # -- id
         "n_dpe",
@@ -249,6 +255,7 @@ class FeatureProcessor:
     """ """
 
     def encode_categorical_wth_map(self, column, mapping, default_unknown=""):
+        """Encode categorical with map"""
         valid_values = list(mapping.keys())
         # id unknown values
         self.data.loc[~self.data[column].isin(valid_values), column] = default_unknown
@@ -258,10 +265,12 @@ class FeatureProcessor:
         self.data[column] = self.data[column].apply(lambda d: mapping[d])
 
     def __init__(self, data, target="etiquette_dpe"):
+        """Init Context"""
         self.data = data
         self.target = target
 
     def missing_values(self):
+        """treat missing values"""
         for col in FeatureSets.columns_categorical:
             self.data[col].fillna("", inplace=True)
 
@@ -270,6 +279,7 @@ class FeatureProcessor:
             self.data.loc[self.data[col] == "", col] = -1.0
 
     def encode_categoricals(self):
+        """encode categorical"""
         # version_dpe as float
         self.data["version_dpe"] = self.data["version_dpe"].astype(float)
         # map_periode_construction
@@ -296,11 +306,13 @@ class FeatureProcessor:
             except:
                 pass
     def encode_floats(self):
+        """Encode floating"""
         self.data[FeatureSets.columns_num] = (
             self.data[FeatureSets.columns_num].astype(float).astype(int)
         )
 
     def process(self):
+        """Process"""
         self.missing_values()
         self.encode_categoricals()
         self.encode_floats()
@@ -309,6 +321,7 @@ class FeatureProcessor:
 logger = logging.getLogger(__name__)
 
 class NotEnoughSamples(ValueError):
+    """NES"""
     pass
 
 
@@ -318,6 +331,7 @@ class NotEnoughSamples(ValueError):
 
 
 class TrainDPE:
+    """TrainDPE Class"""
     param_grid = {
         "n_estimators": sorted([random.randint(1, 20) * 10 for _ in range(2)]),
         "max_depth": [random.randint(3, 10)],
@@ -328,6 +342,7 @@ class TrainDPE:
     minimum_training_samples = 500
 
     def __init__(self, data, target="etiquette_dpe"):
+        """Construct"""
         # drop samples with no target
         data = data[data[target] >= 0].copy()
         data.reset_index(inplace=True, drop=True)
@@ -349,6 +364,7 @@ class TrainDPE:
         self.probabilities = [0.0, 0.0]
 
     def main(self):
+        """Train a model"""
         # shuffle
 
         X = self.data[FeatureSets.train_columns].copy()  # Features
@@ -379,6 +395,7 @@ class TrainDPE:
         self.probabilities = np.max(grid_search.predict_proba(X_test), axis=1)
 
     def report(self):
+        """Report the model"""
         # Best parameters and best score
         print("--" * 20, "Best model")
         print(f"\tparameters: {self.params}")
@@ -417,6 +434,7 @@ mlflow.sklearn.autolog()
 
 
 def load_data_for_inference(n_samples):
+    """Load data for inference"""
     db = Database()
     query = f"select * from dpe_training order by created_at desc limit {n_samples}"
     df = pd.read_sql(query, con=db.engine)
@@ -437,6 +455,7 @@ def load_data_for_inference(n_samples):
 
 
 def load_data_for_training(n_samples):
+    """Load data for training"""
     # simply load payload not all columns
     db = Database()
     query = f"select * from dpe_training order by random() limit {n_samples}"
@@ -461,6 +480,7 @@ client = MlflowClient()
 
 
 def train_model():
+    """Train"""
     data = load_data_for_training(n_samples=2000)
     with mlflow.start_run() as run:
         train = TrainDPE(data)
@@ -511,6 +531,7 @@ def create_champion():
 
 
 def promote_model():
+    """Promote model"""
     X, y = load_data_for_inference(1000)
     # inference challenger and champion
     # load model & inference
