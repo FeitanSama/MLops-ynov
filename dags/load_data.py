@@ -15,7 +15,7 @@ from airflow.models import Variable
 
 # Chemin du fichier de résultats
 try:
-    DATA_PATH = "/airflow/data/"
+    DATA_PATH = "/opt/airflow/data/"
 except:
     DATA_PATH = "/Users/guill/Desktop/MLops-ynov/data/"
 
