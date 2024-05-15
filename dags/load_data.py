@@ -277,3 +277,5 @@ with DAG(
     # upload data
     process_results.set_downstream(upload_data)
     upload_data.set_downstream(cleanup_local_data)
+
+    check_environment_setup >> ademe_api >> process_results >> save_postgresdb >> drop_duplicates >> cleanup_local_data
