@@ -13,7 +13,7 @@ import glob
 import requests
 from azure.storage.blob import BlobServiceClient
 
-DATA_PATH = f"./data/"
+DATA_PATH = "./data/"
 API_PATH = "./data/api/"
 RESULTS_FILE = os.path.join(API_PATH, "results.json")
 ACCOUNT_NAME = "skatai4ademe4mlops"
@@ -51,7 +51,6 @@ def interrogate_api():
     # save results to file
     with open(RESULTS_FILE, "w", encoding="utf-8") as file:
         json.dump(data, file, indent=4, ensure_ascii=False)
-
 
 def process_results():
     """
