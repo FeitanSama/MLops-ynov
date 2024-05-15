@@ -2,16 +2,16 @@ from __future__ import annotations
 import os
 import re
 import json
-import time
+# import time
 from datetime import datetime, timedelta
-import logging
+# import logging
 import typing as t
-import requests
+# import requests
 import pandas as pd
 from db_utils import Database
 from airflow.models.dag import DAG
 from airflow.operators.python import PythonOperator
-from airflow.models import Variable
+# from airflow.models import Variable
 
 # Chemin du fichier de résultats
 try:
