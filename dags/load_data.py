@@ -35,14 +35,14 @@ RESULTS_FILE = os.path.join(DATA_PATH, "api", "results.json")
 def check_environment_setup():
     """Check Env Setup"""
     logger.info("Checking environment setup...")
-    logger.info(f"[info logger] cwd: {os.getcwd()}")
-    logger.info(f"[info logger] URL_FILE: {URL_FILE}")
+    logger.info("[info logger] cwd: %s",os.getcwd())
+    logger.info("[info logger] URL_FILE: %s",URL_FILE)
     assert os.path.isfile(URL_FILE)
-    logger.info(f"[info logger] RESULTS_FILE: {RESULTS_FILE}")
+    logger.info("[info logger] RESULTS_FILE: %s",RESULTS_FILE)
 
     try:
         pg_password = Variable.get("AZURE_PG_PASSWORD")
-    except:
+    except: # pylint: disable=bare-except
         pg_password = os.environ.get("AZURE_PG_PASSWORD")
 
     assert pg_password is not None
