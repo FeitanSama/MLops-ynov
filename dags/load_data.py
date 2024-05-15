@@ -291,4 +291,4 @@ with DAG(
     process_results.set_downstream(upload_data)
     upload_data.set_downstream(cleanup_local_data) # pylint: disable=no-member
 
-    check_environment_setup >> ademe_api >> process_results >> save_postgresdb >> drop_duplicates >> cleanup_local_data # pylint: disable=locally-disabled, multiple-statements, fixme, line-too-long
+    check_environment_setup >> ademe_api >> process_results >> save_postgresdb >> drop_duplicates >> cleanup_local_data # pylint: disable=pointless-statement, line-too-long
