@@ -1,0 +1,41 @@
+.vscode
+
+factory
+sandbox
+venv
+howto
+mlruns
+.mlruns
+mlruns.db
+
+secrets.toml
+
+__init__.py
+
+
+.DS_store
+**/.DS_store
+**/__pycache__
+
+.coverage
+__pycache__/
+.ipynb_checkpoints
+
+.~lock.*
+~$*
+
+*.pyc
+
+*.pkl
+log/*.log
+logs/*.log
+
+next.md
+
+# data
+data/ademe-dpe-tertiaire/*.json
+# *.csv
+# *.pdf
+
+# *.zip
+# *.xml
