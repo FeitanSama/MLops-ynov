@@ -23,7 +23,6 @@ jobs:
         run: |
           make lint
 
-
   deploy:
     needs: build
     runs-on: ubuntu-latest
