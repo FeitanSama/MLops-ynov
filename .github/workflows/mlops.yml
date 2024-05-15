@@ -1,0 +1,49 @@
+name: Validate code
+
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          make install
+
+      - name: Format code
+        run: |
+          make format
+
+      - name: Lint with pyLint
+        run: |
+          make lint
+
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Set up SSH connection
+      uses: appleboy/ssh-action@master
+      with:
+        host : ${{ secrets.IP }}
+        username : ${{ secrets.USER }}
+        password : ${{ secrets.PASSWORD }}
+        
+    - name: Deploy code to VM
+      run: | 
+          cd /home/azureuser/airflow
+          git checkout .
+          git pull
+          docker
+          docker-compose down
+          docker-compose up -d
