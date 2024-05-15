@@ -255,40 +255,35 @@ with DAG(
 ) as dag:
     
     # Vérifier la configuration de l'environnement
-    check_environment_setup = PythonOperator(
+    check_environment_setup_task = PythonOperator(
         task_id="check_environment_setup",
         python_callable=check_environment_setup,
     )
 
-    ademe_api = PythonOperator(
+    ademe_api_task = PythonOperator(
         task_id="ademe_api",
         python_callable=ademe_api,
     )
 
-    process_results = PythonOperator(
+    process_results_task = PythonOperator(
         task_id="process_results",
         python_callable=process_results,
     )
 
     # Tâche pour charger les données dans PostgreSQL
-    save_postgresdb = PythonOperator(
+    save_postgresdb_task = PythonOperator(
         task_id="save_postgresdb",
         python_callable=save_postgresdb,
     )
 
-    drop_duplicates = PythonOperator(
+    drop_duplicates_task = PythonOperator(
         task_id="drop_duplicates",
         python_callable=drop_duplicates,
     )
 
-    # Définir les dépendances entre les tâches
-    check_environment_setup.set_downstream(ademe_api)
-    ademe_api.set_downstream(process_results)
-    # save to postgres
-    ademe_api.set_downstream(save_postgresdb)
-    save_postgresdb.set_downstream(drop_duplicates)
-    # upload data
-    process_results.set_downstream(upload_data)
-    upload_data.set_downstream(cleanup_local_data) # pylint: disable=no-member
+    cleanup_local_data_task = PythonOperator(
+        task_id="cleanup_local_data",
+        python_callable=cleanup_local_data,
+    )
 
-    check_environment_setup >> ademe_api >> process_results >> save_postgresdb >> drop_duplicates >> cleanup_local_data # pylint: disable=pointless-statement, line-too-long
+    check_environment_setup_task >> ademe_api_task >> process_results_task >> save_postgresdb_task >> drop_duplicates_task >> cleanup_local_data_task # pylint: disable=pointless-statement, line-too-long
