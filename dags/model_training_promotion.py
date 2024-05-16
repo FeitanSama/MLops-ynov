@@ -287,4 +287,4 @@ with DAG(
 
     promote_model_task = PythonOperator(task_id="promote_model_task", python_callable=promote_model)
 
-    train_model_task >> create_champion_task >> promote_model_task # pylint: disable=pointless-statement
+    print(train_model_task >> create_champion_task >> promote_model_task) # pylint: disable=pointless-statement
