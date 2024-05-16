@@ -60,8 +60,8 @@ def ademe_api():
 
     # make GET requests
     results = requests.get(
-        url.get("url"), 
-        params=url.get("payload"), 
+        url.get("url"),
+        params=url.get("payload"),
         timeout=5)
     assert results.raise_for_status() is None
 
@@ -69,7 +69,7 @@ def ademe_api():
 
     # save results to file
     with open(RESULTS_FILE, "w", encoding="utf-8") as file:
-        json.dump(data, file, indent=4, ensure_ascii=False)  
+        json.dump(data, file, indent=4, ensure_ascii=False)
 
 def process_results():
     """Process results"""
@@ -100,7 +100,7 @@ def process_results():
     # append current timestamp (up to the second to the filename)
     timestamp = int(time.time())
     data_filename = os.path.join(
-        DOWNLOADED_FILES_PATH, 
+        DOWNLOADED_FILES_PATH,
         f"data_{timestamp}.json"
     )
 
@@ -193,7 +193,7 @@ def upload_data():
 
         # Insert data into the database
         data.to_sql(name="dpe_logement", con=db, if_exists="replace", index=False)
-    
+
     # Close the database connection
     db.close()
 
@@ -253,7 +253,7 @@ with DAG(
     catchup=False,
     tags=["ademe"],
 ) as dag:
-    
+
     # Vérifier la configuration de l'environnement
     check_environment_setup_task = PythonOperator(
         task_id="check_environment_setup",

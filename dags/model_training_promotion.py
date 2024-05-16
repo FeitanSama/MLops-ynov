@@ -3,6 +3,10 @@ Training the model
 """
 import json
 from datetime import datetime, timedelta
+import random
+import logging
+import os
+import psycopg2
 import pandas as pd
 import numpy as np
 
@@ -10,15 +14,12 @@ from sklearn.metrics import precision_score, recall_score
 from sklearn.model_selection import train_test_split, GridSearchCV, KFold
 from sklearn.ensemble import RandomForestClassifier
 import mlflow
-import logging
-from airflow.models.dag import DAG
-from airflow.operators.python import PythonOperator
-import psycopg2
-from sqlalchemy import create_engine
-import os
-from airflow.models import Variable
-import random
+from mlflow import MlflowClient
 
+from airflow.operators.python import PythonOperator
+from airflow.models import Variable, DAG
+
+from sqlalchemy import create_engine
 
 class Database:
     """Database class"""
@@ -26,7 +27,7 @@ class Database:
         """Init Context"""
         try:
             pg_password = Variable.get("AZURE_PG_PASSWORD")
-        except:
+        except KeyError:
             pg_password = os.environ.get("AZURE_PG_PASSWORD")
 
         db_params = {
@@ -38,9 +39,15 @@ class Database:
             "sslmode": "require",
         }
 
+        db_user = db_params['user']
+        db_password = db_params['password']
+        db_host = db_params['host']
+        db__port = db_params['port']
+        db_dbname = db_params['dbname']
+
         self.connection = psycopg2.connect(**db_params)
         self.engine = create_engine(
-            f"postgresql://{db_params['user']}:{db_params['password']}@{db_params['host']}:{db_params['port']}/{db_params['dbname']}"
+            f"postgresql://{db_user}:{db_password}@{db_host}:{db__port}/{db_dbname}"
         )
 
     def insert(self, insert_query):
@@ -66,6 +73,23 @@ class Database:
 
 class FeatureSets:
     """Feature set class"""
+
+    @staticmethod
+    def get_input_columns():
+        """Get input columns"""
+        return FeatureSets.input_columns
+
+    @staticmethod
+    def get_categorical_mappings():
+        """Get categorical mappings"""
+        return {
+            "target": FeatureSets.map_target,
+            "type_energie": FeatureSets.map_type_energie,
+            "periode_construction": FeatureSets.map_periode_construction,
+            "secteur_activite": FeatureSets.map_secteur_activite,
+            "type_usage_energie": FeatureSets.map_usage_energie
+        }
+
     input_columns = [
         # -- id
         "n_dpe",
@@ -168,11 +192,13 @@ class FeatureSets:
         "N : Restaurants et débits de boisson": 6,
         "U : Établissements de soins": 7,
         "GHW : Bureaux": 8,
-        "R : Établissements d’éveil, d’enseignement, de formation, centres de vacances, centres de loisirs sans hébergement": 9,
+        "R : Établissements d’éveil, d’enseignement, de formation" 
+            + ", centres de vacances, centres de loisirs sans hébergement": 9,
         "O : Hôtels et pensions de famille": 10,
         "GHZ : Usage mixte": 11,
         "X : Établissements sportifs couverts": 12,
-        "L : Salles d'auditions, de conférences, de réunions, de spectacles ou à usage multiple": 13,
+        "L : Salles d'auditions, de conférences, de réunions,"
+            + " de spectacles ou à usage multiple": 13,
         "T : Salles d'exposition à vocation commerciale": 14,
         "P : Salles de danse et salles de jeux": 15,
         "GHR : Enseignement": 16,
@@ -252,7 +278,7 @@ class FeatureSets:
 
 
 class FeatureProcessor:
-    """ """
+    """ Feature set Processor"""
 
     def encode_categorical_wth_map(self, column, mapping, default_unknown=""):
         """Encode categorical with map"""
@@ -299,11 +325,12 @@ class FeatureProcessor:
         self.encode_categorical_wth_map("type_usage_energie_n_1", FeatureSets.map_usage_energie)
 
         # encode targets
+        map_target = FeatureSets.map_target
         for target in ["etiquette_dpe", "etiquette_ges"]:
             try:
                 if target in self.data.columns():
-                    self.encode_categorical_wth_map(target, FeatureSets.map_target, default_unknown=-1)
-            except:
+                    self.encode_categorical_wth_map(target, map_target, default_unknown=-1)
+            except KeyError:
                 pass
     def encode_floats(self):
         """Encode floating"""
@@ -322,7 +349,6 @@ logger = logging.getLogger(__name__)
 
 class NotEnoughSamples(ValueError):
     """NES"""
-    pass
 
 
 # --------------------------------------------------
@@ -332,15 +358,7 @@ class NotEnoughSamples(ValueError):
 
 class TrainDPE:
     """TrainDPE Class"""
-    param_grid = {
-        "n_estimators": sorted([random.randint(1, 20) * 10 for _ in range(2)]),
-        "max_depth": [random.randint(3, 10)],
-        "min_samples_leaf": [random.randint(2, 5)],
-    }
-    n_splits = 3
-    test_size = 0.3
     minimum_training_samples = 500
-
     def __init__(self, data, target="etiquette_dpe"):
         """Construct"""
         # drop samples with no target
@@ -348,53 +366,62 @@ class TrainDPE:
         data.reset_index(inplace=True, drop=True)
         if data.shape[0] < TrainDPE.minimum_training_samples:
             raise NotEnoughSamples(
-                "data has {data.shape[0]} samples, which is not enough to train a model. min required {TrainDPE.minimum_training_samples}"
+                "data has {data.shape[0]} samples, which is not enough to train a model."
+                    + " min required {TrainDPE.minimum_training_samples}"
             )
 
         self.data = data
         print(f"training on {data.shape[0]} samples")
-
-        self.model = RandomForestClassifier()
         self.target = target
+        self.model = RandomForestClassifier()
         self.params = {}
         self.train_score = 0.0
-
-        self.precision_score = 0.0
-        self.recall_score = 0.0
         self.probabilities = [0.0, 0.0]
 
     def main(self):
         """Train a model"""
+
+        param_grid = {
+            "n_estimators": sorted([random.randint(1, 20) * 10 for _ in range(2)]),
+            "max_depth": [random.randint(3, 10)],
+            "min_samples_leaf": [random.randint(2, 5)],
+        }
+        n_splits = 3
+        test_size = 0.3
+        precision = 0.0
+        recall = 0.0
+
         # shuffle
 
-        X = self.data[FeatureSets.train_columns].copy()  # Features
-        y = self.data[self.target].copy()  # Target variable
+        feature = self.data[FeatureSets.train_columns].copy()  # Features
+        target = self.data[self.target].copy()  # Target variable
 
         # Split the data into training and testing sets
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=TrainDPE.test_size, random_state=808
+        features_train, feature_test, y_train, y_test = train_test_split(
+            feature, target, test_size=test_size, random_state=808
         )
 
         # Setup GridSearchCV with k-fold cross-validation
-        cv = KFold(n_splits=TrainDPE.n_splits, random_state=42, shuffle=True)
+        cv = KFold(n_splits=n_splits, random_state=42, shuffle=True)
 
         grid_search = GridSearchCV(
-            estimator=self.model, param_grid=TrainDPE.param_grid, cv=cv, scoring="accuracy"
+            estimator=self.model, param_grid=param_grid, cv=cv, scoring="accuracy"
         )
 
         # Fit the model
-        grid_search.fit(X_train, y_train)
+        grid_search.fit(features_train, y_train)
 
         self.model = grid_search.best_estimator_
         self.params = grid_search.best_params_
         self.train_score = grid_search.best_score_
 
-        yhat = grid_search.predict(X_test)
-        self.precision_score = precision_score(y_test, yhat, average="weighted")
-        self.recall_score = recall_score(y_test, yhat, average="weighted")
-        self.probabilities = np.max(grid_search.predict_proba(X_test), axis=1)
+        yhat = grid_search.predict(feature_test)
+        precision = precision_score(y_test, yhat, average="weighted")
+        recall = recall_score(y_test, yhat, average="weighted")
+        self.probabilities = np.max(grid_search.predict_proba(feature_test), axis=1)
+        return precision, recall
 
-    def report(self):
+    def report(self, precision, recall):
         """Report the model"""
         # Best parameters and best score
         print("--" * 20, "Best model")
@@ -402,8 +429,8 @@ class TrainDPE:
         print(f"\tcross-validation score: {self.train_score}")
         print(f"\tmodel: {self.model}")
         print("--" * 20, "performance")
-        print(f"\tprecision_score: {np.round(self.precision_score, 2)}")
-        print(f"\trecall_score: {np.round(self.recall_score, 2)}")
+        print(f"\tprecision_score: {np.round(precision, 2)}")
+        print(f"\trecall_score: {np.round(recall, 2)}")
         print(f"\tmedian(probabilities): {np.round(np.median(self.probabilities), 2)}")
         print(f"\tstd(probabilities): {np.round(np.std(self.probabilities), 2)}")
 
@@ -411,9 +438,9 @@ class TrainDPE:
 # --------------------------------------------------
 # set up MLflow
 # --------------------------------------------------
-from mlflow import MlflowClient
 
-experiment_name = "dpe_tertiaire"
+
+EXPERIMENT_NAME = "dpe_tertiaire"
 
 # mlflow.set_tracking_uri("http://host.docker.internal:5001")
 # mlflow.set_tracking_uri("http://localhost:9090")
@@ -424,7 +451,7 @@ mlflow.set_tracking_uri("http://mlflow:5000")
 print("--" * 40)
 print("mlflow set experiment")
 print("--" * 40)
-mlflow.set_experiment(experiment_name)
+mlflow.set_experiment(EXPERIMENT_NAME)
 
 mlflow.sklearn.autolog()
 
@@ -440,7 +467,7 @@ def load_data_for_inference(n_samples):
     df = pd.read_sql(query, con=db.engine)
     db.close()
     # dump payload into new dataframe
-    df["payload"] = df["payload"].apply(lambda d: json.loads(d))
+    df["payload"] = df["payload"].apply(json.loads)
     data = pd.DataFrame(list(df.payload.values))
 
     data.drop(columns="n_dpe", inplace=True)
@@ -449,9 +476,9 @@ def load_data_for_inference(n_samples):
     data.reset_index(inplace=True, drop=True)
     print(data.shape)
     y = data["etiquette_dpe"]
-    X = data[FeatureSets.train_columns]
+    feature = data[FeatureSets.train_columns]
 
-    return X, y
+    return feature, y
 
 
 def load_data_for_training(n_samples):
@@ -462,7 +489,7 @@ def load_data_for_training(n_samples):
     df = pd.read_sql(query, con=db.engine)
     db.close()
     # dump payload into new dataframe
-    df["payload"] = df["payload"].apply(lambda d: json.loads(d))
+    df["payload"] = df["payload"].apply(json.loads)
     data = pd.DataFrame(list(df.payload.values))
     data.drop(columns="n_dpe", inplace=True)
     data = data.astype(int)
@@ -474,8 +501,8 @@ def load_data_for_training(n_samples):
 # ---------------------------------------------
 #  tasks
 # ---------------------------------------------
-challenger_model_name = "dpe_challenger"
-champion_model_name = "dpe_champion"
+CHALLENGER_MODEL_NAME = "dpe_challenger"
+CHAMPION_MODEL_NAME = "dpe_champion"
 client = MlflowClient()
 
 
@@ -485,26 +512,25 @@ def train_model():
     with mlflow.start_run() as run:
         train = TrainDPE(data)
         train.main()
-        train.report()
-
+        train.report(precision=0.0, recall=0.0)
         try:
-            model = client.get_registered_model(challenger_model_name)
-        except:
-            print("model does not exist")
-            print("registering new model", challenger_model_name)
+            client.get_registered_model(CHALLENGER_MODEL_NAME)
+        except ImportError as e:
+            print("model does not exist", str(e))
+            print("registering new model", CHALLENGER_MODEL_NAME)
             client.create_registered_model(
-                challenger_model_name, description="sklearn random forest for dpe_tertiaire"
+                CHALLENGER_MODEL_NAME, description="sklearn random forest for dpe_tertiaire"
             )
 
         # set version and stage
         run_id = run.info.run_id
         model_uri = f"runs:/{run_id}/model"
         model_version = client.create_model_version(
-            name=challenger_model_name, source=model_uri, run_id=run_id
+            name=CHALLENGER_MODEL_NAME, source=model_uri, run_id=run_id
         )
 
         client.transition_model_version_stage(
-            name=challenger_model_name, version=model_version.version, stage="Staging"
+            name=CHALLENGER_MODEL_NAME, version=model_version.version, stage="Staging"
         )
 
 
@@ -512,39 +538,39 @@ def create_champion():
     """
     if there is not champion yet, creates a champion from current challenger
     """
-    results = client.search_registered_models(filter_string=f"name='{champion_model_name}'")
+    results = client.search_registered_models(filter_string=f"name='{CHAMPION_MODEL_NAME}'")
     # if not exists: promote current model
     if len(results) == 0:
         print("champion model not found, promoting challenger to champion")
 
         champion_model = client.copy_model_version(
-            src_model_uri=f"models:/{challenger_model_name}/Staging",
-            dst_name=champion_model_name,
+            src_model_uri=f"models:/{CHALLENGER_MODEL_NAME}/Staging",
+            dst_name=CHAMPION_MODEL_NAME,
         )
         client.transition_model_version_stage(
-            name=champion_model_name, version=champion_model.version, stage="Staging"
+            name=CHAMPION_MODEL_NAME, version=champion_model.version, stage="Staging"
         )
 
         # reload champion and print info
-        results = client.search_registered_models(filter_string=f"name='{champion_model_name}'")
+        results = client.search_registered_models(filter_string=f"name='{CHAMPION_MODEL_NAME}'")
         print(results[0].latest_versions)
 
 
 def promote_model():
     """Promote model"""
-    X, y = load_data_for_inference(1000)
+    feature, y = load_data_for_inference(1000)
     # inference challenger and champion
     # load model & inference
-    chl = mlflow.sklearn.load_model(f"models:/{challenger_model_name}/Staging")
-    yhat = chl.best_estimator_.predict(X)
+    chl = mlflow.sklearn.load_model(f"models:/{CHALLENGER_MODEL_NAME}/Staging")
+    yhat = chl.best_estimator_.predict(feature)
     challenger_precision = precision_score(y, yhat, average="weighted")
     challenger_recall = recall_score(y, yhat, average="weighted")
     print(f"\t challenger_precision: {np.round(challenger_precision, 2)}")
     print(f"\t challenger_recall: {np.round(challenger_recall, 2)}")
 
     # inference on production model
-    champ = mlflow.sklearn.load_model(f"models:/{champion_model_name}/Staging")
-    yhat = champ.best_estimator_.predict(X)
+    champ = mlflow.sklearn.load_model(f"models:/{CHAMPION_MODEL_NAME}/Staging")
+    yhat = champ.best_estimator_.predict(feature)
     champion_precision = precision_score(y, yhat, average="weighted")
     champion_recall = recall_score(y, yhat, average="weighted")
     print(f"\t champion_precision: {np.round(champion_precision, 2)}")
@@ -555,12 +581,12 @@ def promote_model():
         print(f"{challenger_precision} > {champion_precision}")
         print("Promoting new model to champion ")
         champion_model = client.copy_model_version(
-            src_model_uri=f"models:/{challenger_model_name}/Staging",
-            dst_name=champion_model_name,
+            src_model_uri=f"models:/{CHALLENGER_MODEL_NAME}/Staging",
+            dst_name=CHAMPION_MODEL_NAME,
         )
 
         client.transition_model_version_stage(
-            name=champion_model_name, version=champion_model.version, stage="Staging"
+            name=CHAMPION_MODEL_NAME, version=champion_model.version, stage="Staging"
         )
     else:
         print(f"{challenger_precision} < {champion_precision}")
@@ -590,4 +616,4 @@ with DAG(
 
     promote_model_task = PythonOperator(task_id="promote_model_task", python_callable=promote_model)
 
-    train_model_task >> create_champion_task >> promote_model_task
+    train_model_task >> create_champion_task >> promote_model_task # pylint: disable=pointless-statement

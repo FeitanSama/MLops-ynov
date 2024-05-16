@@ -3,24 +3,26 @@
 Documentation that goes along with the Airflow tutorial located
 [here](https://airflow.apache.org/tutorial.html)
 """
-
-from datetime import datetime, timedelta
+import json
+import os
 import logging
+from datetime import datetime, timedelta
+import psycopg2
 import pandas as pd
+
 from airflow.models.dag import DAG
 from airflow.operators.python import PythonOperator
 from airflow.models import Variable
-import numpy as np
-import json
-import psycopg2
+
 from sqlalchemy import create_engine
-import os
+
 
 class Database:
+    '''Database class'''
     def __init__(self):
         try:
             pg_password = Variable.get("AZURE_PG_PASSWORD")
-        except:
+        except Exception: # pylint: disable=bare-except, broad-exception-caught
             pg_password = os.environ.get("AZURE_PG_PASSWORD")
 
         db_params = {
@@ -32,12 +34,19 @@ class Database:
             "sslmode": "require",
         }
 
+        db_user = db_params["user"]
+        db_password = db_params["password"]
+        db_host = db_params["host"]
+        db_port = db_params["port"]
+        db_name = db_params["dbname"]
+
         self.connection = psycopg2.connect(**db_params)
         self.engine = create_engine(
-            f"postgresql://{db_params['user']}:{db_params['password']}@{db_params['host']}:{db_params['port']}/{db_params['dbname']}"
+            f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
         )
 
     def insert(self, insert_query):
+        '''Insert method'''
         cursor = self.connection.cursor()
 
         cursor.execute(insert_query)
@@ -45,6 +54,7 @@ class Database:
         cursor.close()
 
     def execute(self, query_):
+        '''Execute method'''
         cursor = self.connection.cursor()
 
         cursor.execute(query_)
@@ -52,10 +62,28 @@ class Database:
         cursor.close()
 
     def close(self):
+        '''Close method'''
         self.connection.close()
         self.engine.dispose()
 
 class FeatureSets:
+    """FeatureSets class"""
+    @staticmethod
+    def get_input_columns():
+        """Get input columns"""
+        return FeatureSets.input_columns
+
+    @staticmethod
+    def get_categorical_mappings():
+        """Get categorical mappings"""
+        return {
+            "target": FeatureSets.map_target,
+            "type_energie": FeatureSets.map_type_energie,
+            "periode_construction": FeatureSets.map_periode_construction,
+            "secteur_activite": FeatureSets.map_secteur_activite,
+            "type_usage_energie": FeatureSets.map_usage_energie
+        }
+
     input_columns = [
         # -- id
         "n_dpe",
@@ -158,11 +186,13 @@ class FeatureSets:
         "N : Restaurants et débits de boisson": 6,
         "U : Établissements de soins": 7,
         "GHW : Bureaux": 8,
-        "R : Établissements d’éveil, d’enseignement, de formation, centres de vacances, centres de loisirs sans hébergement": 9,
+        "R : Établissements d’éveil, d’enseignement, de formation,"
+            + " centres de vacances, centres de loisirs sans hébergement": 9,
         "O : Hôtels et pensions de famille": 10,
         "GHZ : Usage mixte": 11,
         "X : Établissements sportifs couverts": 12,
-        "L : Salles d'auditions, de conférences, de réunions, de spectacles ou à usage multiple": 13,
+        "L : Salles d'auditions, de conférences, de réunions," 
+            + " de spectacles ou à usage multiple": 13,
         "T : Salles d'exposition à vocation commerciale": 14,
         "P : Salles de danse et salles de jeux": 15,
         "GHR : Enseignement": 16,
@@ -242,9 +272,10 @@ class FeatureSets:
 
 
 class FeatureProcessor:
-    """ """
+    """ FeatureProcessor class"""
 
     def encode_categorical_wth_map(self, column, mapping, default_unknown=""):
+        """Encode categorical with mapping"""
         valid_values = list(mapping.keys())
         # id unknown values
         self.data.loc[~self.data[column].isin(valid_values), column] = default_unknown
@@ -258,6 +289,7 @@ class FeatureProcessor:
         self.target = target
 
     def missing_values(self):
+        """Missing values"""
         for col in FeatureSets.columns_categorical:
             self.data[col].fillna("", inplace=True)
 
@@ -266,6 +298,7 @@ class FeatureProcessor:
             self.data.loc[self.data[col] == "", col] = -1.0
 
     def encode_categoricals(self):
+        """Encode categoricals"""
         # version_dpe as float
         self.data["version_dpe"] = self.data["version_dpe"].astype(float)
         # map_periode_construction
@@ -276,27 +309,32 @@ class FeatureProcessor:
         # secteur_activite
         self.encode_categorical_wth_map("secteur_activite", FeatureSets.map_secteur_activite)
 
+
+        energie_map = FeatureSets.map_type_energie
         # type energie
         self.encode_categorical_wth_map(
-            "type_energie_principale_chauffage", FeatureSets.map_type_energie
+            "type_energie_principale_chauffage", energie_map
         )
-        self.encode_categorical_wth_map("type_energie_n_1", FeatureSets.map_type_energie)
+        self.encode_categorical_wth_map("type_energie_n_1", energie_map)
         # type_usage_energie_n_1
-        self.encode_categorical_wth_map("type_usage_energie_n_1", FeatureSets.map_usage_energie)
+        self.encode_categorical_wth_map("type_usage_energie_n_1", energie_map)
 
+        map_target = FeatureSets.map_target
         # encode targets
         for target in ["etiquette_dpe", "etiquette_ges"]:
             try:
                 if target in self.data.columns():
-                    self.encode_categorical_wth_map(target, FeatureSets.map_target, default_unknown=-1)
-            except:
+                    self.encode_categorical_wth_map(target, map_target, default_unknown=-1)
+            except Exception: # pylint: disable=bare-except, broad-exception-caught
                 pass
     def encode_floats(self):
+        """Encode floats"""
         self.data[FeatureSets.columns_num] = (
             self.data[FeatureSets.columns_num].astype(float).astype(int)
         )
 
     def process(self):
+        """Process"""
         self.missing_values()
         self.encode_categoricals()
         self.encode_floats()
@@ -308,8 +346,8 @@ logger = logging.getLogger(__name__)
 # instanciate class
 # ---------------------------------------------
 
-
 def transform():
+    """Transform data"""
     db = Database()
     columns = ",".join(FeatureSets.input_columns)
     query = f"""
@@ -336,8 +374,8 @@ def transform():
 
     db.close()
 
-
 def drop_duplicates():
+    """Drop duplicates"""
     query = """
         DELETE FROM dpe_training
         WHERE n_dpe IN (
@@ -375,4 +413,4 @@ with DAG(
         task_id="drop_duplicates_task", python_callable=drop_duplicates
     )
 
-    transform_data_task >> drop_duplicates_task
+    transform_data_task >> drop_duplicates_task #pylint: disable=pointless-statement
