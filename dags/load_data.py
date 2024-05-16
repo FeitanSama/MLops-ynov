@@ -29,16 +29,16 @@ except: # pylint: disable=bare-except
     DATA_PATH = "/Users/guill/Desktop/MLops-ynov/data/"
 
 DOWNLOADED_FILES_PATH = os.path.join(DATA_PATH)
-URL_FILE = os.path.join(DATA_PATH, "api", "url.json")
-RESULTS_FILE = os.path.join(DATA_PATH, "api", "results.json")
+URL_FILE_LOAD_DATA = os.path.join(DATA_PATH, "api", "url.json")
+RESULTS_FILE_LOAD_DATA = os.path.join(DATA_PATH, "api", "results.json")
 
 def check_environment_setup():
     """Check Env Setup"""
     logger.info("Checking environment setup...")
     logger.info("[info logger] cwd: %s",os.getcwd())
-    logger.info("[info logger] URL_FILE: %s",URL_FILE)
-    assert os.path.isfile(URL_FILE)
-    logger.info("[info logger] RESULTS_FILE: %s",RESULTS_FILE)
+    logger.info("[info logger] URL_FILE: %s",URL_FILE_LOAD_DATA)
+    assert os.path.isfile(URL_FILE_LOAD_DATA)
+    logger.info("[info logger] RESULTS_FILE: %s",RESULTS_FILE_LOAD_DATA)
 
     try:
         pg_password = Variable.get("AZURE_PG_PASSWORD")
@@ -51,33 +51,33 @@ def check_environment_setup():
 def ademe_api():
     """Get Data from Ademe API"""
     # test url file exists
-    assert os.path.isfile(URL_FILE)
+    assert os.path.isfile(URL_FILE_LOAD_DATA)
     # open url file
-    with open(URL_FILE, encoding="utf-8") as file:
-        url = json.load(file)
-    assert url.get("url") is not None
-    assert url.get("payload") is not None
+    with open(URL_FILE_LOAD_DATA, encoding="utf-8") as file:
+        url_load_data = json.load(file)
+    assert url_load_data.get("url") is not None
+    assert url_load_data.get("payload") is not None
 
-    # make GET requests
-    results = requests.get(
-        url.get("url"),
-        params=url.get("payload"),
+    # make GET requests load data
+    results_load_data = requests.get(
+        url_load_data.get("url"),
+        params=url_load_data.get("payload"),
         timeout=5)
-    assert results.raise_for_status() is None
+    assert results_load_data.raise_for_status() is None
 
-    data = results.json()
+    data = results_load_data.json()
 
     # save results to file
-    with open(RESULTS_FILE, "w", encoding="utf-8") as file:
+    with open(RESULTS_FILE_LOAD_DATA, "w", encoding="utf-8") as file:
         json.dump(data, file, indent=4, ensure_ascii=False)
 
 def process_results():
     """Process results"""
     # test url file exists
-    assert os.path.isfile(RESULTS_FILE)
+    assert os.path.isfile(RESULTS_FILE_LOAD_DATA)
 
     # read previous API call output
-    with open(RESULTS_FILE, encoding="utf-8") as file:
+    with open(RESULTS_FILE_LOAD_DATA, encoding="utf-8") as file:
         data = json.load(file)
 
     # new url is same as old url
@@ -85,15 +85,15 @@ def process_results():
 
     # extract payload as dict
     parsed_url = urlparse(data.get("next"))
-    query_params = parse_qs(parsed_url.query)
+    query_params_data = parse_qs(parsed_url.query)
     new_payload = {
-        k: v[0] if len(v) == 1 else v for k, v in query_params.items()
+        k: v[0] if len(v) == 1 else v for k, v in query_params_data.items()
     }
 
     # save new url (same as old url) with new payload into url.json
     new_url = {"url": base_url, "payload": new_payload}
 
-    with open(URL_FILE, "w", encoding="utf-8") as file:
+    with open(URL_FILE_LOAD_DATA, "w", encoding="utf-8") as file:
         json.dump(new_url, file, indent=4, ensure_ascii=False)
 
     # saves data to data file
@@ -212,10 +212,10 @@ def cleanup_local_data():
 # Chargement des données dans la base de données PostgreSQL
 def save_postgresdb():
     """ Save PostgreSQL database"""
-    assert os.path.isfile(RESULTS_FILE)
+    assert os.path.isfile(RESULTS_FILE_LOAD_DATA)
 
     # Lire la sortie de l'appel API précédent
-    with open(RESULTS_FILE, encoding="utf-8") as file:
+    with open(RESULTS_FILE_LOAD_DATA, encoding="utf-8") as file:
         data = json.load(file)
 
     data = pd.DataFrame(data["results"])
@@ -286,4 +286,5 @@ with DAG(
         python_callable=cleanup_local_data,
     )
 
-    check_environment_setup_task >> ademe_api_task >> process_results_task >> save_postgresdb_task >> drop_duplicates_task >> cleanup_local_data_task # pylint: disable=pointless-statement, line-too-long
+    print(check_environment_setup_task >> ademe_api_task >> process_results_task >>
+            save_postgresdb_task >> drop_duplicates_task >> cleanup_local_data_task)

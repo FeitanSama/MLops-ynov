@@ -20,7 +20,7 @@ ACCOUNT_NAME = "skatai4ademe4mlops"
 ACCOUNT_KEY = os.environ.get("STORAGE_BLOB_ADEME_MLOPS")
 CONTAINER_NAME = "ademe-dpe-tertiaire"
 
-URL_FILE = os.path.join(API_PATH, "url.json")
+URL_FILE_BUILD_DATASET = os.path.join(API_PATH, "url.json")
 def interrogate_api():
     """
     Interrogates the ADEME API using the specified URL and payload from a JSON file.
@@ -35,18 +35,20 @@ def interrogate_api():
 
     """
     # test url file exists
-    assert os.path.isfile(URL_FILE)
+    assert os.path.isfile(URL_FILE_BUILD_DATASET)
     # open url file
-    with open(URL_FILE, encoding="utf-8") as file:
-        url = json.load(file)
-    assert url.get("url") is not None
-    assert url.get("payload") is not None
+    with open(URL_FILE_BUILD_DATASET, encoding="utf-8") as file:
+        url_build_data = json.load(file)
+    assert url_build_data.get("url") is not None
+    assert url_build_data.get("payload") is not None
 
-    # make GET requests
-    results = requests.get(url.get("url"), params=url.get("payload"), timeout=5)
-    assert results.raise_for_status() is None
+    # make GET requests build dataset
+    results_build_data = requests.get(
+        url_build_data.get("url"),
+        params=url_build_data.get("payload"), timeout=5)
+    assert results_build_data.raise_for_status() is None
 
-    data = results.json()
+    data = results_build_data.json()
 
     # save results to file
     with open(RESULTS_FILE, "w", encoding="utf-8") as file:
@@ -79,13 +81,13 @@ def process_results():
 
     # extract payload as dict
     parsed_url = urlparse(data.get("next"))
-    query_params = parse_qs(parsed_url.query)
-    new_payload = {k: v[0] if len(v) == 1 else v for k, v in query_params.items()}
+    query_params_build = parse_qs(parsed_url.query)
+    new_payload = {k: v[0] if len(v) == 1 else v for k, v in query_params_build.items()}
 
     # save new url (same as old url) with new payload into url.json
     new_url = {"url": base_url, "payload": new_payload}
 
-    with open(URL_FILE, "w", encoding="utf-8") as file:
+    with open(URL_FILE_BUILD_DATASET, "w", encoding="utf-8") as file:
         json.dump(new_url, file, indent=4, ensure_ascii=False)
 
     # saves data to data file
